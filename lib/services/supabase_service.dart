@@ -7,20 +7,20 @@ class SupabaseService {
   SupabaseClient get _client => Supabase.instance.client;
 
   // --- FETCH DATA ---
-  Future<List<ItemModel>> getItems() async {
-    try {
-      final response = await _client
-          .from('items')
-          .select()
-          .eq('status', 'active') // Fetch only active items
-          .order('created_at', ascending: false);
-      
-      return (response as List).map((item) => ItemModel.fromMap(item)).toList();
-    } catch (e) {
-      print("Fetch Error: $e");
-      rethrow;
-    }
+  Future<List<ItemModel>> getItems({String status = 'active'}) async {
+  try {
+    final response = await _client
+        .from('items')
+        .select()
+        .eq('status', status) // Filter based on the passed status
+        .order('created_at', ascending: false);
+    
+    return (response as List).map((item) => ItemModel.fromMap(item)).toList();
+  } catch (e) {
+    print("Fetch Error: $e");
+    rethrow;
   }
+}
 
   // --- UPLOAD & REPORT ---
   Future<void> addItem({
