@@ -7,13 +7,16 @@ class SupabaseService {
   // Always use the global instance to keep the session active
   SupabaseClient get _client => Supabase.instance.client;
 
+  // Getter for current user
+  User? get currentUser => _client.auth.currentUser;
+
   // --- FETCH DATA ---
   Future<List<ItemModel>> getItems({String status = 'active'}) async {
     try {
       final response = await _client
           .from('items')
           .select()
-          .eq('status', status) // Filter based on the passed status
+          .eq('status', status)
           .order('created_at', ascending: false);
 
       return (response as List).map((item) => ItemModel.fromMap(item)).toList();
@@ -24,6 +27,7 @@ class SupabaseService {
   }
 
   // --- UPLOAD & REPORT ---
+  // FIXED: Added verificationQuestion to the parameters
   Future<void> addItem({
     required String title,
     required String description,
@@ -32,47 +36,56 @@ class SupabaseService {
     String? locationName,
     double? lat,
     double? lng,
+    String? verificationQuestion, // NEW PARAMETER
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception("User not authenticated");
 
-    // Fix: Using 'item-images' with the dash
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final path = '${user.id}/$fileName';
+    try {
+      // 1. Storage Upload
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final path = '${user.id}/$fileName';
 
-    await _client.storage.from('item-images').upload(path, imageFile);
-    final imageUrl = _client.storage.from('item-images').getPublicUrl(path);
+      await _client.storage.from('item-images').upload(path, imageFile);
+      final imageUrl = _client.storage.from('item-images').getPublicUrl(path);
 
-    await _client.from('items').insert({
-      'title': title,
-      'description': description,
-      'image_url': imageUrl,
-      'user_id': user.id,
-      'type': type,
-      'location_name': locationName,
-      'latitude': lat,
-      'longitude': lng,
-    });
+      // 2. Database Insert
+      await _client.from('items').insert({
+        'title': title,
+        'description': description,
+        'image_url': imageUrl,
+        'user_id': user.id,
+        'type': type,
+        'location_name': locationName,
+        'latitude': lat,
+        'longitude': lng,
+        'status': 'active',
+        'verification_question': verificationQuestion, // SAVING TO DB
+      });
+    } catch (e) {
+      print("Add Item Error: $e");
+      rethrow;
+    }
   }
-
-  // NEW: Getter for current user
-  User? get currentUser => _client.auth.currentUser;
 
   // --- DELETE ITEM ---
   Future<void> deleteItem(ItemModel item) async {
-    // 1. Extract the filename from the URL to delete from storage
-    // The path is usually: userId/filename.jpg
-    final uri = Uri.parse(item.imageUrl);
-    final pathSegments = uri.pathSegments;
-    // This takes the last two segments (userId and filename)
-    final storagePath =
-        "${pathSegments[pathSegments.length - 2]}/${pathSegments.last}";
+    try {
+      // Extract storage path: userId/filename.jpg
+      final uri = Uri.parse(item.imageUrl);
+      final pathSegments = uri.pathSegments;
+      
+      // Safety check for URL parsing
+      if (pathSegments.length >= 2) {
+        final storagePath = "${pathSegments[pathSegments.length - 2]}/${pathSegments.last}";
+        await _client.storage.from('item-images').remove([storagePath]);
+      }
 
-    // 2. Delete from Storage
-    await _client.storage.from('item-images').remove([storagePath]);
-
-    // 3. Delete from Database
-    await _client.from('items').delete().eq('id', item.id);
+      await _client.from('items').delete().eq('id', item.id);
+    } catch (e) {
+      print("Delete Error: $e");
+      rethrow;
+    }
   }
 
   Future<void> updateItemStatus(String itemId, String newStatus) async {
@@ -86,16 +99,18 @@ class SupabaseService {
     String? location,
   ) async {
     String searchType = (currentType == 'lost') ? 'found' : 'lost';
+    
+    // Take the first word of the title for a broader search
     String keyword = title.split(' ')[0];
 
     var query = _client
         .from('items')
         .select()
         .eq('type', searchType)
+        .eq('status', 'active') // Only match against active items
         .ilike('title', '%$keyword%')
         .neq('user_id', _client.auth.currentUser?.id ?? '');
 
-    // If a location is provided, filter by it too!
     if (location != null && location.isNotEmpty) {
       query = query.ilike('location_name', '%$location%');
     }
@@ -104,15 +119,14 @@ class SupabaseService {
     return (response as List).map((item) => ItemModel.fromMap(item)).toList();
   }
 
+  // --- LOCATION SERVICES ---
   Future<Position?> getCurrentPosition() async {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // 1. Check if location services are enabled
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return null;
 
-    // 2. Handle permissions
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -121,7 +135,6 @@ class SupabaseService {
 
     if (permission == LocationPermission.deniedForever) return null;
 
-    // 3. Get coordinates
     return await Geolocator.getCurrentPosition();
   }
 

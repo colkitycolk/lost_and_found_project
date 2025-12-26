@@ -3,12 +3,13 @@ class ItemModel {
   final String title;
   final String description;
   final String imageUrl;
-  final String type;
+  final String type; // 'lost' or 'found'
+  final String? locationName;
+  final double? latitude;
+  final double? longitude;
   final String userId;
   final String status;
-  final String? locationName; // New
-  final double? latitude;    // New
-  final double? longitude;   // New
+  final String? verificationQuestion; // NEW FIELD
 
   ItemModel({
     required this.id,
@@ -16,11 +17,12 @@ class ItemModel {
     required this.description,
     required this.imageUrl,
     required this.type,
-    required this.userId,
-    required this.status,
     this.locationName,
     this.latitude,
     this.longitude,
+    required this.userId,
+    required this.status,
+    this.verificationQuestion, // NEW FIELD
   });
 
   factory ItemModel.fromMap(Map<String, dynamic> map) {
@@ -30,11 +32,27 @@ class ItemModel {
       description: map['description'] ?? '',
       imageUrl: map['image_url'] ?? '',
       type: map['type'] ?? 'found',
-      userId: map['user_id'] ?? '',
-      status: map['status'] ?? 'active',
       locationName: map['location_name'],
       latitude: map['latitude']?.toDouble(),
       longitude: map['longitude']?.toDouble(),
+      userId: map['user_id'] ?? '',
+      status: map['status'] ?? 'active',
+      verificationQuestion: map['verification_question'], // NEW FIELD
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'title': title,
+      'description': description,
+      'image_url': imageUrl,
+      'type': type,
+      'location_name': locationName,
+      'latitude': latitude,
+      'longitude': longitude,
+      'user_id': userId,
+      'status': status,
+      'verification_question': verificationQuestion, // NEW FIELD
+    };
   }
 }
