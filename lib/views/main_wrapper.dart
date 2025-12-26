@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'dashboard_screen.dart';
 import 'my_items_screen.dart';
+import 'inbox_screen.dart'; // Import your new Inbox Screen
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
@@ -13,16 +14,19 @@ class MainWrapper extends StatefulWidget {
 class _MainWrapperState extends State<MainWrapper> {
   int _currentIndex = 0;
 
-  // The list of screens to switch between
+  // Added InboxScreen to the list
   final List<Widget> _screens = [
     const HomeScreen(),
     const MyItemsScreen(),
+    const InboxScreen(), // New Tab
     const DashboardScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // IndexedStack keeps the state of each tab alive 
+      // (e.g., your scroll position in the Inbox stays where it is)
       body: IndexedStack(
         index: _currentIndex,
         children: _screens,
@@ -37,6 +41,7 @@ class _MainWrapperState extends State<MainWrapper> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.blueAccent,
         unselectedItemColor: Colors.grey,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
         showUnselectedLabels: true,
         items: const [
           BottomNavigationBarItem(
@@ -50,9 +55,14 @@ class _MainWrapperState extends State<MainWrapper> {
             label: 'My Items',
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.mail_outline), // Added Mail Icon
+            activeIcon: Icon(Icons.mail),
+            label: 'Inbox',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.dashboard_outlined),
             activeIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
+            label: 'Stats',
           ),
         ],
       ),

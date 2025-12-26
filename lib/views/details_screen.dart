@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart'; // Standard sharing package
 import '../models/item_model.dart';
 import '../services/supabase_service.dart';
+import 'chat_screen.dart';
 
 class DetailsScreen extends StatefulWidget {
   final ItemModel item;
@@ -17,35 +19,42 @@ class DetailsScreen extends StatefulWidget {
 class _DetailsScreenState extends State<DetailsScreen> {
   final _service = SupabaseService();
   bool _isUpdating = false;
-  bool _isVerified = false; // Tracks if user passed the challenge
+  bool _isVerified = false;
 
-  // Function to handle status change (Owner Only)
   Future<void> _updateStatus(String newStatus) async {
     setState(() => _isUpdating = true);
     try {
       await _service.updateItemStatus(widget.item.id, newStatus);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Item marked as $newStatus")),
-        );
-        Navigator.pop(context, true); 
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Item is now $newStatus")));
+        // We return 'true' to tell the previous screen to refresh the list
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     } finally {
       if (mounted) setState(() => _isUpdating = false);
     }
   }
 
-  // FIXED: Corrected the string interpolation for Google Maps
+  void _shareItem() {
+    final String text =
+        "Check out this ${widget.item.type} item: ${widget.item.title}\n\n"
+        "Description: ${widget.item.description}\n"
+        "Posted on Lost&Found App";
+    Share.share(text, subject: widget.item.title);
+  }
+
   Future<void> _openInExternalMap() async {
-    final String googleMapsUrl =
+    final String url =
         "https://www.google.com/maps/search/?api=1&query=${widget.item.latitude},${widget.item.longitude}";
-    final Uri uri = Uri.parse(googleMapsUrl);
+    final Uri uri = Uri.parse(url);
 
     try {
       if (await canLaunchUrl(uri)) {
@@ -62,29 +71,42 @@ class _DetailsScreenState extends State<DetailsScreen> {
     }
   }
 
-  // NEW: Logic to handle the verification question
   void _handleClaimProcess() {
-    // If no verification question exists, go straight to contact
-    if (widget.item.verificationQuestion == null || widget.item.verificationQuestion!.isEmpty) {
-      setState(() => _isVerified = true);
+    if (_isVerified) {
+      _navigateToChat();
       return;
     }
+    if (widget.item.verificationQuestion == null ||
+        widget.item.verificationQuestion!.trim().isEmpty) {
+      setState(() => _isVerified = true);
+      _navigateToChat();
+      return;
+    }
+    _showVerificationDialog();
+  }
 
+  void _showVerificationDialog() {
     final answerController = TextEditingController();
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Ownership Challenge"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text("Verify Ownership"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("To protect the owner, please answer the finder's question:"),
+            const Text(
+              "Please answer the finder's question:",
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
             const SizedBox(height: 12),
             Text(
               widget.item.verificationQuestion!,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blueAccent,
+              ),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -97,19 +119,32 @@ class _DetailsScreenState extends State<DetailsScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
           ElevatedButton(
             onPressed: () {
-              // Simulation: In a real app, this would notify the owner
               setState(() => _isVerified = true);
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Verification sent! You can now contact the finder.")),
-              );
+              _navigateToChat();
             },
-            child: const Text("Submit Answer"),
+            child: const Text("Confirm & Chat"),
           ),
         ],
+      ),
+    );
+  }
+
+  void _navigateToChat() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(
+          itemId: widget.item.id,
+          receiverId: widget.item.userId,
+          itemTitle: widget.item.title,
+        ),
       ),
     );
   }
@@ -118,183 +153,255 @@ class _DetailsScreenState extends State<DetailsScreen> {
   Widget build(BuildContext context) {
     final bool isMine = widget.item.userId == _service.currentUser?.id;
     final bool isLost = widget.item.type == 'lost';
-    final bool hasLocation = widget.item.latitude != null && widget.item.longitude != null;
+    final bool hasLocation =
+        widget.item.latitude != null && widget.item.longitude != null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("Item Details")),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Image Section with Zoom capability
-              InteractiveViewer(
+      appBar: AppBar(
+        title: const Text("Item Details"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            onPressed: _shareItem,
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Hero(
+              tag: widget.item.id,
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
                 child: Container(
                   color: Colors.black,
-                  width: double.infinity,
-                  height: 300,
-                  child: Image.network(widget.item.imageUrl, fit: BoxFit.contain),
+                  child: Image.network(
+                    widget.item.imageUrl,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
-
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header: Title & Badge
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.item.title,
-                            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.item.title,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Chip(
-                          label: Text(widget.item.type.toUpperCase()),
-                          backgroundColor: isLost ? Colors.red[100] : Colors.green[100],
+                      ),
+                      Chip(
+                        label: Text(
+                          widget.item.type.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
                         ),
-                      ],
+                        backgroundColor: isLost
+                            ? Colors.redAccent
+                            : Colors.green,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(),
+                  const Text(
+                    "Description",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.item.description,
+                    style: const TextStyle(fontSize: 16, height: 1.5),
+                  ),
+                  const SizedBox(height: 25),
+                  if (hasLocation) ...[
+                    const Text(
+                      "Last Spotted At",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "Status: ${widget.item.status.toUpperCase()}",
-                      style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
-                    ),
-
-                    const Divider(height: 40),
-
-                    // Description
-                    const Text("Description", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text(widget.item.description, style: const TextStyle(fontSize: 16, color: Colors.black87)),
-
-                    const SizedBox(height: 25),
-
-                    // Location Section
-                    if (hasLocation) ...[
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 200,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: FlutterMap(
+                        options: MapOptions(
+                          initialCenter: LatLng(
+                            widget.item.latitude!,
+                            widget.item.longitude!,
+                          ),
+                          initialZoom: 15,
+                        ),
                         children: [
-                          const Text("Last Spotted At", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          TextButton.icon(
-                            onPressed: _openInExternalMap,
-                            icon: const Icon(Icons.directions),
-                            label: const Text("Open Maps"),
+                          TileLayer(
+                            urlTemplate:
+                                'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: LatLng(
+                                  widget.item.latitude!,
+                                  widget.item.longitude!,
+                                ),
+                                width: 40,
+                                height: 40,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.red,
+                                  size: 40,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                      if (widget.item.locationName != null)
-                        Text(widget.item.locationName!, style: const TextStyle(color: Colors.blueGrey, fontStyle: FontStyle.italic)),
-                      const SizedBox(height: 12),
-                      Container(
-                        height: 180,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(15),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: FlutterMap(
-                          options: MapOptions(
-                            initialCenter: LatLng(widget.item.latitude!, widget.item.longitude!),
-                            initialZoom: 15,
-                          ),
-                          children: [
-                            TileLayer(
-                              urlTemplate: 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
-                              subdomains: const ['a', 'b', 'c'],
-                            ),
-                            MarkerLayer(
-                              markers: [
-                                Marker(
-                                  point: LatLng(widget.item.latitude!, widget.item.longitude!),
-                                  width: 40,
-                                  height: 40,
-                                  child: const Icon(Icons.location_on, color: Colors.red, size: 40),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 100), // Space for bottom button
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      // Persistent Bottom Button
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))],
-        ),
-        child: SafeArea(
-          child: Builder(builder: (context) {
-            // 1. If the item is already resolved, show a "Closed" indicator for everyone
-            if (widget.item.status.toLowerCase() == 'resolved') {
-              return Container(
-                height: 55,
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text(
-                      "THIS CASE IS RESOLVED",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black54,
-                        letterSpacing: 1.1,
+                    ),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: _openInExternalMap,
+                        icon: const Icon(Icons.directions),
+                        label: const Text("Open in Google Maps"),
                       ),
                     ),
                   ],
-                ),
-              );
-            }
-
-            // 2. If it's MY item and NOT resolved yet
-            if (isMine) {
-              return ElevatedButton.icon(
-                onPressed: _isUpdating ? null : () => _updateStatus('resolved'),
-                icon: const Icon(Icons.check_circle),
-                label: const Text("Mark as Resolved"),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 55),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              );
-            }
-
-            // 3. If it's SOMEONE ELSE'S item and NOT resolved yet
-            return ElevatedButton.icon(
-              onPressed: _handleClaimProcess,
-              icon: Icon(_isVerified ? Icons.chat : Icons.lock_outline),
-              label: Text(_isVerified 
-                  ? "Contact Owner" 
-                  : (isLost ? "I Found This" : "This is mine")),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _isVerified ? Colors.orange : Colors.blueAccent,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 55),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  const SizedBox(height: 100),
+                ],
               ),
-            );
-          }),
+            ),
+          ],
         ),
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(child: _buildBottomAction(isMine, isLost)),
+      ),
+    );
+  }
+
+  Widget _buildBottomAction(bool isMine, bool isLost) {
+    final String status = widget.item.status.toLowerCase();
+
+    // 1. If the item is RESOLVED
+    if (status == 'resolved') {
+      if (isMine) {
+        // Owner sees the option to RE-ACTIVATE
+        return _buildOwnerButton(
+          label: "Re-activate Item",
+          color: Colors.orange,
+          statusToSet: "active",
+          icon: Icons.history,
+        );
+      } else {
+        // Others see a static badge
+        return _buildClosedBadge();
+      }
+    }
+
+    // 2. If the item is ACTIVE
+    if (isMine) {
+      return _buildOwnerButton(
+        label: "Mark as Resolved",
+        color: Colors.green,
+        statusToSet: "resolved",
+        icon: Icons.check_circle,
+      );
+    }
+    return _buildClaimButton(isLost);
+  }
+
+  Widget _buildClosedBadge() {
+    return Container(
+      height: 55,
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.lock_outline, color: Colors.grey),
+          SizedBox(width: 8),
+          Text(
+            "THIS CASE IS RESOLVED",
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOwnerButton({
+    required String label,
+    required Color color,
+    required String statusToSet,
+    required IconData icon,
+  }) {
+    return ElevatedButton.icon(
+      onPressed: _isUpdating ? null : () => _updateStatus(statusToSet),
+      icon: _isUpdating
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            )
+          : Icon(icon),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(double.infinity, 55),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  Widget _buildClaimButton(bool isLost) {
+    return ElevatedButton.icon(
+      onPressed: _handleClaimProcess,
+      icon: Icon(_isVerified ? Icons.chat_bubble : Icons.security),
+      label: Text(
+        _isVerified
+            ? "Continue to Chat"
+            : (isLost ? "I Found This" : "This is mine"),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _isVerified ? Colors.blueAccent : Colors.indigo,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(double.infinity, 55),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

@@ -175,6 +175,78 @@ class SupabaseService {
     return (response as List).map((item) => ItemModel.fromMap(item)).toList();
   }
 
+  // Stream for real-time messages between two users for a specific item
+  Stream<List<Map<String, dynamic>>> getChatStream(
+    String itemId,
+    String otherUserId,
+  ) {
+    final myId = _client.auth.currentUser!.id;
+
+    return _client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('item_id', itemId)
+        .order('created_at', ascending: true)
+        .map(
+          (data) => data
+              .where(
+                (msg) =>
+                    (msg['sender_id'] == myId &&
+                        msg['receiver_id'] == otherUserId) ||
+                    (msg['sender_id'] == otherUserId &&
+                        msg['receiver_id'] == myId),
+              )
+              .toList(),
+        );
+  }
+
+  // Send a message to another user regarding a specific item
+  Future<void> sendMessage(
+    String itemId,
+    String receiverId,
+    String text,
+  ) async {
+    await _client.from('messages').insert({
+      'item_id': itemId,
+      'receiver_id': receiverId,
+      'sender_id': _client.auth.currentUser!.id,
+      'text': text,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getMyConversations() async {
+    final userId = _client.auth.currentUser!.id;
+
+    // Gets all messages where you are the sender or receiver
+    final response = await _client
+        .from('messages')
+        .select('*, items(title, image_url)')
+        .or('sender_id.eq.$userId,receiver_id.eq.$userId')
+        .order('created_at', ascending: false);
+
+    final List<dynamic> data = response;
+    final Map<String, Map<String, dynamic>> latestChats = {};
+
+    for (var msg in data) {
+      final String otherId = msg['sender_id'] == userId
+          ? msg['receiver_id']
+          : msg['sender_id'];
+      final String chatKey = "${msg['item_id']}_$otherId";
+
+      // Only store the most recent message for each unique conversation
+      if (!latestChats.containsKey(chatKey)) {
+        latestChats[chatKey] = msg;
+      }
+    }
+    return latestChats.values.toList();
+  }
+
+  // --- FETCH ITEM BY ID ---
+  Future<ItemModel?> getItemById(String id) async {
+    final data = await _client.from('items').select().eq('id', id).single();
+    return ItemModel.fromMap(data);
+  }
+
   // --- AUTH ---
   Future<AuthResponse> signIn(String email, String password) async {
     return await _client.auth.signInWithPassword(
