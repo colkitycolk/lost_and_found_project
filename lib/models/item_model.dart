@@ -5,7 +5,10 @@ class ItemModel {
   final String imageUrl;
   final String type;
   final String userId;
-  final String status; // <--- Add this
+  final String status;
+  final String? locationName; // New
+  final double? latitude;    // New
+  final double? longitude;   // New
 
   ItemModel({
     required this.id,
@@ -14,7 +17,10 @@ class ItemModel {
     required this.imageUrl,
     required this.type,
     required this.userId,
-    required this.status, // <--- Add this
+    required this.status,
+    this.locationName,
+    this.latitude,
+    this.longitude,
   });
 
   factory ItemModel.fromMap(Map<String, dynamic> map) {
@@ -25,7 +31,10 @@ class ItemModel {
       imageUrl: map['image_url'] ?? '',
       type: map['type'] ?? 'found',
       userId: map['user_id'] ?? '',
-      status: map['status'] ?? 'active', // <--- Add this
+      status: map['status'] ?? 'active',
+      locationName: map['location_name'],
+      latitude: map['latitude']?.toDouble(),
+      longitude: map['longitude']?.toDouble(),
     );
   }
 }
