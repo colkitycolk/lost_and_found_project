@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/item_model.dart';
 import '../services/supabase_service.dart';
 
@@ -33,7 +36,29 @@ class _DetailsScreenState extends State<DetailsScreen> {
         ).showSnackBar(SnackBar(content: Text("Error updating status: $e")));
       }
     } finally {
-      setState(() => _isUpdating = false);
+      if (mounted) setState(() => _isUpdating = false);
+    }
+  }
+
+  // FIXED: Function to open location in external map application
+  Future<void> _openInExternalMap() async {
+    // Correct URL format for Google Maps
+    final String googleMapsUrl =
+        "https://www.google.com/maps/search/?api=1&query=${widget.item.latitude},${widget.item.longitude}";
+    final Uri uri = Uri.parse(googleMapsUrl);
+
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        throw 'Could not launch maps';
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not open maps application")),
+        );
+      }
     }
   }
 
@@ -41,144 +66,217 @@ class _DetailsScreenState extends State<DetailsScreen> {
   Widget build(BuildContext context) {
     final bool isMine = widget.item.userId == _service.currentUser?.id;
     final bool isLost = widget.item.type == 'lost';
+    final bool hasLocation =
+        widget.item.latitude != null && widget.item.longitude != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text("Item Details")),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image Section with Zoom capability
-            InteractiveViewer(
-              child: Container(
-                // Wrap the image in a Container
-                color: Colors.black, // Set the background color here
-                width: double.infinity,
-                height: 300,
-                child: Image.network(
-                  widget.item.imageUrl,
-                  fit: BoxFit.contain, // This ensures the image doesn't stretch
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Image Section
+              InteractiveViewer(
+                child: Container(
+                  color: Colors.black,
+                  width: double.infinity,
+                  height: 300,
+                  child: Image.network(
+                    widget.item.imageUrl,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
-            ),
 
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header: Title and Type Badge
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          widget.item.title,
-                          style: const TextStyle(
-                            fontSize: 26,
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title and Type Badge
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.item.title,
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Chip(
+                          label: Text(widget.item.type.toUpperCase()),
+                          backgroundColor: isLost
+                              ? Colors.red[100]
+                              : Colors.green[100],
+                          labelStyle: TextStyle(
+                            color: isLost ? Colors.red[900] : Colors.green[900],
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                      Chip(
-                        label: Text(widget.item.type.toUpperCase()),
-                        backgroundColor: isLost
-                            ? Colors.red[100]
-                            : Colors.green[100],
-                        labelStyle: TextStyle(
-                          color: isLost ? Colors.red[900] : Colors.green[900],
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
+                      ],
+                    ),
 
-                  // Status Indicator
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.info_outline,
-                        size: 16,
+                    // Status
+                    Text(
+                      "Status: ${widget.item.status.toUpperCase()}",
+                      style: const TextStyle(
                         color: Colors.grey,
+                        fontWeight: FontWeight.w500,
                       ),
-                      const SizedBox(width: 5),
-                      Text(
-                        "Status: ${widget.item.status.toUpperCase()}",
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w500,
+                    ),
+
+                    const Divider(height: 40),
+
+                    // Description Section
+                    const Text(
+                      "Description",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.item.description,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.black87,
+                      ),
+                    ),
+
+                    const SizedBox(height: 25),
+
+                    // NEW: Location & Map Section
+                    if (hasLocation) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            "Location Spotted",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _openInExternalMap,
+                            icon: const Icon(Icons.directions),
+                            label: const Text("Open Maps"),
+                          ),
+                        ],
+                      ),
+                      if (widget.item.locationName != null)
+                        Text(
+                          widget.item.locationName!,
+                          style: const TextStyle(
+                            color: Colors.blueGrey,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+                      Container(
+                        height: 180,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(15),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: FlutterMap(
+                          options: MapOptions(
+                            initialCenter: LatLng(
+                              widget.item.latitude!,
+                              widget.item.longitude!,
+                            ),
+                            initialZoom: 15,
+                            interactionOptions: const InteractionOptions(
+                              flags: InteractiveFlag.none,
+                            ),
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate:
+                                  'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', // Humanitarian style (often more reliable)
+                              subdomains: const ['a', 'b', 'c'],
+                              userAgentPackageName: 'lost_and_found_project',
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                Marker(
+                                  point: LatLng(
+                                    widget.item.latitude!,
+                                    widget.item.longitude!,
+                                  ),
+                                  width: 40,
+                                  height: 40,
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    color: Colors.red,
+                                    size: 40,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
 
-                  const Divider(height: 40),
+                    const SizedBox(height: 40),
 
-                  const Text(
-                    "Description",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    widget.item.description,
-                    style: const TextStyle(fontSize: 16, color: Colors.black87),
-                  ),
-
-                  const SizedBox(height: 40),
-
-                  // Action Buttons
-                  if (isMine) ...[
-                    // OWNER ACTIONS
-                    const Text(
-                      "Owner Controls",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: _isUpdating
-                            ? null
-                            : () => _updateStatus('resolved'),
-                        icon: const Icon(Icons.check_circle),
-                        label: const Text("Mark as Resolved / Returned"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
+                    // Action Buttons
+                    if (isMine) ...[
+                      const Text(
+                        "Owner Controls",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: _isUpdating
+                              ? null
+                              : () => _updateStatus('resolved'),
+                          icon: const Icon(Icons.check_circle),
+                          label: const Text("Mark as Resolved"),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ),
-                    ),
-                  ] else ...[
-                    // FINDER/CLAIMER ACTIONS
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          // For now, just a snackbar - future: Open Chat
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Contacting owner..."),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.chat_bubble_outline),
-                        label: Text(
-                          isLost ? "I Found This" : "This belongs to me",
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          foregroundColor: Colors.white,
+                    ] else ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text("Contacting owner..."),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          label: Text(
+                            isLost ? "I Found This" : "This belongs to me",
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
