@@ -12,10 +12,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _service = SupabaseService();
-  bool _isLoading = true;
-  List<ItemModel> _items = [];
+  final _searchController = TextEditingController(); // Search Controller
   
-  // Track the current filter status
+  bool _isLoading = true;
+  List<ItemModel> _allItems = [];      // Master list for the selected status
+  List<ItemModel> _filteredItems = []; // List shown after searching
   String _selectedStatus = 'active'; 
 
   @override
@@ -24,7 +25,12 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadData();
   }
 
-  // Refetched data based on the selectedStatus
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadData() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
@@ -32,7 +38,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final items = await _service.getItems(status: _selectedStatus);
       if (mounted) {
         setState(() {
-          _items = items;
+          _allItems = items;
+          // Apply search filter if text already exists
+          _runSearch(_searchController.text); 
           _isLoading = false;
         });
       }
@@ -44,6 +52,22 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     }
+  }
+
+  // SEARCH LOGIC: Filters the master list locally
+  void _runSearch(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredItems = _allItems;
+      } else {
+        _filteredItems = _allItems.where((item) {
+          final title = item.title.toLowerCase();
+          final desc = item.description.toLowerCase();
+          final searchLower = query.toLowerCase();
+          return title.contains(searchLower) || desc.contains(searchLower);
+        }).toList();
+      }
+    });
   }
 
   Future<void> _confirmDelete(ItemModel item) async {
@@ -88,35 +112,64 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
           ),
         ],
+        // SEARCH BAR ATTACHED TO APPBAR
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(70),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _runSearch, // Update list as you type
+              decoration: InputDecoration(
+                hintText: "Search in $_selectedStatus items...",
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty 
+                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
+                      _searchController.clear();
+                      _runSearch('');
+                    })
+                  : null,
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
-      body: Column(
-        children: [
-          // Filter Toggle Row
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            color: Colors.white,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildFilterChip('active', 'Current Feed', Icons.rss_feed),
-                const SizedBox(width: 12),
-                _buildFilterChip('resolved', 'Success Stories', Icons.stars),
-              ],
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Filter Toggle Row
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              color: Colors.white,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildFilterChip('active', 'Current Feed', Icons.rss_feed),
+                  const SizedBox(width: 12),
+                  _buildFilterChip('resolved', 'Success Stories', Icons.stars),
+                ],
+              ),
             ),
-          ),
-          
-          // Main Content
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _loadData,
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _items.isEmpty
-                      ? _buildEmptyState()
-                      : _buildItemGrid(),
+            
+            // Main Content
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadData,
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _filteredItems.isEmpty
+                        ? _buildEmptyState()
+                        : _buildItemGrid(),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
@@ -135,13 +188,13 @@ class _HomeScreenState extends State<HomeScreen> {
       avatar: Icon(icon, size: 16, color: isSelected ? Colors.white : Colors.blue),
       label: Text(label),
       selected: isSelected,
-      selectedColor: Colors.blueAccent,
       onSelected: (bool selected) {
         if (selected && _selectedStatus != status) {
           setState(() => _selectedStatus = status);
           _loadData();
         }
       },
+      selectedColor: Colors.blueAccent,
       labelStyle: TextStyle(
         color: isSelected ? Colors.white : Colors.black87,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -150,14 +203,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildEmptyState() {
-    return ListView( // ListView makes RefreshIndicator work even when empty
+    return ListView(
       children: [
-        SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+        SizedBox(height: MediaQuery.of(context).size.height * 0.15),
         const Icon(Icons.search_off_rounded, size: 80, color: Colors.grey),
         const SizedBox(height: 16),
         Center(
           child: Text(
-            "No $_selectedStatus items found.",
+            _searchController.text.isEmpty 
+              ? "No $_selectedStatus items found."
+              : "No matches for '${_searchController.text}'",
             style: const TextStyle(fontSize: 16, color: Colors.grey),
           ),
         ),
@@ -174,9 +229,9 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
-      itemCount: _items.length,
+      itemCount: _filteredItems.length,
       itemBuilder: (context, index) {
-        final item = _items[index];
+        final item = _filteredItems[index];
         final bool isMine = item.userId == _service.currentUser?.id;
 
         return Card(
@@ -229,35 +284,32 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              
-              // Status Badge (Top Left)
+              // Status Badge
               Positioned(
                 top: 8,
                 left: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: item.type == 'lost' ? Colors.redAccent : Colors.greenAccent[700],
-                    borderRadius: BorderRadius.circular(6),
-                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                    borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     item.type.toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
-
-              // Delete Button (Top Right)
+              // Delete Button
               if (isMine)
                 Positioned(
                   top: 4,
                   right: 4,
                   child: IconButton(
                     icon: const CircleAvatar(
-                      radius: 14,
+                      radius: 12,
                       backgroundColor: Colors.black54,
-                      child: Icon(Icons.delete_outline, color: Colors.white, size: 16),
+                      child: Icon(Icons.close, color: Colors.white, size: 14),
                     ),
                     onPressed: () => _confirmDelete(item),
                   ),
