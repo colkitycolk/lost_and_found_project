@@ -16,9 +16,9 @@ class _ReportScreenState extends State<ReportScreen> {
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
   final _service = SupabaseService();
-  
+
   // NEW: Track if reporting a Lost or Found item
-  String _itemType = 'found'; 
+  String _itemType = 'found';
   File? _selectedImage;
   bool _isUploading = false;
 
@@ -40,30 +40,36 @@ class _ReportScreenState extends State<ReportScreen> {
   void _showMatchDialog(List<ItemModel> matches) {
     showDialog(
       context: context,
-      barrierDismissible: false, // Force user to acknowledge
       builder: (context) => AlertDialog(
-        title: Text(
-          _itemType == 'lost' ? 'Matching Found Items!' : 'Matching Lost Reports!',
-          style: const TextStyle(color: Colors.blueAccent),
-        ),
+        title: Text("${matches.length} Potential Matches Found!"),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView.builder(
+          // Using a ListView inside the dialog for multiple candidates
+          child: ListView.separated(
             shrinkWrap: true,
             itemCount: matches.length,
+            separatorBuilder: (context, index) => const Divider(),
             itemBuilder: (context, index) {
               final match = matches[index];
               return ListTile(
-                leading: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: Image.network(match.imageUrl, width: 40, height: 40, fit: BoxFit.cover),
+                leading: Image.network(
+                  match.imageUrl,
+                  width: 50,
+                  fit: BoxFit.cover,
                 ),
                 title: Text(match.title),
-                subtitle: const Text('Tap to view details'),
+                subtitle: Text(
+                  match.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => DetailsScreen(item: match)),
+                    MaterialPageRoute(
+                      builder: (context) => DetailsScreen(item: match),
+                    ),
                   );
                 },
               );
@@ -74,9 +80,9 @@ class _ReportScreenState extends State<ReportScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Go back to Home
+              Navigator.pop(context); // Go Home
             },
-            child: const Text('Close'),
+            child: const Text("None of these are mine"),
           ),
         ],
       ),
@@ -104,7 +110,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
       // 2. RUN THE ALGORITHM: Check for matches
       final matches = await _service.findMatches(
-        _titleController.text.trim(), 
+        _titleController.text.trim(),
         _itemType,
       );
 
@@ -114,14 +120,18 @@ class _ReportScreenState extends State<ReportScreen> {
         } else {
           Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Reported successfully! No immediate matches found.')),
+            const SnackBar(
+              content: Text(
+                'Reported successfully! No immediate matches found.',
+              ),
+            ),
           );
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
@@ -215,7 +225,10 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
                 child: _isUploading
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Submit & Run Matching', style: TextStyle(fontSize: 16)),
+                    : const Text(
+                        'Submit & Run Matching',
+                        style: TextStyle(fontSize: 16),
+                      ),
               ),
             ),
           ],

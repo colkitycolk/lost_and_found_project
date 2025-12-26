@@ -46,6 +46,26 @@ class SupabaseService {
       'type': type,
     });
   }
+  
+  // NEW: Getter for current user
+  User? get currentUser => _client.auth.currentUser;
+
+  // --- DELETE ITEM ---
+  Future<void> deleteItem(ItemModel item) async {
+  // 1. Extract the filename from the URL to delete from storage
+  // The path is usually: userId/filename.jpg
+  final uri = Uri.parse(item.imageUrl);
+  final pathSegments = uri.pathSegments;
+  // This takes the last two segments (userId and filename)
+  final storagePath = "${pathSegments[pathSegments.length - 2]}/${pathSegments.last}";
+
+  // 2. Delete from Storage
+  await _client.storage.from('item-images').remove([storagePath]);
+
+  // 3. Delete from Database
+  await _client.from('items').delete().eq('id', item.id);
+  }
+
 
   // --- MATCHING ALGORITHM ---
   Future<List<ItemModel>> findMatches(String title, String currentType) async {
