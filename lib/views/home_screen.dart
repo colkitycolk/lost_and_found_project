@@ -12,11 +12,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _service = SupabaseService();
-  final _searchController = TextEditingController(); // Search Controller
+  final _searchController = TextEditingController();
   
   bool _isLoading = true;
-  List<ItemModel> _allItems = [];      // Master list for the selected status
-  List<ItemModel> _filteredItems = []; // List shown after searching
+  List<ItemModel> _allItems = [];      
+  List<ItemModel> _filteredItems = []; 
   String _selectedStatus = 'active'; 
 
   @override
@@ -39,7 +39,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _allItems = items;
-          // Apply search filter if text already exists
           _runSearch(_searchController.text); 
           _isLoading = false;
         });
@@ -54,7 +53,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // SEARCH LOGIC: Filters the master list locally
   void _runSearch(String query) {
     setState(() {
       if (query.isEmpty) {
@@ -70,69 +68,31 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _confirmDelete(ItemModel item) async {
-    final bool? proceed = await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Delete Report?"),
-        content: const Text("This will permanently remove this item."),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (proceed == true) {
-      try {
-        await _service.deleteItem(item);
-        _loadData(); 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Deleted successfully")));
-        }
-      } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Lost & Found'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-          ),
-        ],
-        // SEARCH BAR ATTACHED TO APPBAR
+        title: const Text('Community Feed', style: TextStyle(fontWeight: FontWeight.bold)),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        // The Search Bar is now integrated more cleanly
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(70),
+          preferredSize: const Size.fromHeight(60),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: TextField(
               controller: _searchController,
-              onChanged: _runSearch, // Update list as you type
+              onChanged: _runSearch,
               decoration: InputDecoration(
-                hintText: "Search in $_selectedStatus items...",
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty 
-                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
-                      _searchController.clear();
-                      _runSearch('');
-                    })
-                  : null,
+                hintText: "Search in $_selectedStatus...",
+                prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: Colors.grey[100],
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(15),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -140,80 +100,82 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Filter Toggle Row
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              color: Colors.white,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildFilterChip('active', 'Current Feed', Icons.rss_feed),
-                  const SizedBox(width: 12),
-                  _buildFilterChip('resolved', 'Success Stories', Icons.stars),
-                ],
-              ),
+      body: Column(
+        children: [
+          // Elegant Filter Row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                _buildSimpleChip('active', 'Active Items'),
+                const SizedBox(width: 8),
+                _buildSimpleChip('resolved', 'Resolved'),
+              ],
             ),
-            
-            // Main Content
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _loadData,
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _filteredItems.isEmpty
-                        ? _buildEmptyState()
-                        : _buildItemGrid(),
-              ),
+          ),
+          
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _loadData,
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _filteredItems.isEmpty
+                      ? _buildEmptyState()
+                      : _buildItemGrid(),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      // FAB stays here for quick reporting
+      floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final result = await Navigator.pushNamed(context, '/report');
           if (result == true) _loadData();
         },
-        label: const Text("Report"),
-        icon: const Icon(Icons.add),
+        backgroundColor: Colors.blueAccent,
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
 
-  Widget _buildFilterChip(String status, String label, IconData icon) {
+  Widget _buildSimpleChip(String status, String label) {
     final bool isSelected = _selectedStatus == status;
-    return ChoiceChip(
-      avatar: Icon(icon, size: 16, color: isSelected ? Colors.white : Colors.blue),
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (bool selected) {
-        if (selected && _selectedStatus != status) {
+    return GestureDetector(
+      onTap: () {
+        if (_selectedStatus != status) {
           setState(() => _selectedStatus = status);
           _loadData();
         }
       },
-      selectedColor: Colors.blueAccent,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.black87,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blueAccent : Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.black87,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildEmptyState() {
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       children: [
-        SizedBox(height: MediaQuery.of(context).size.height * 0.15),
-        const Icon(Icons.search_off_rounded, size: 80, color: Colors.grey),
+        SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+        const Icon(Icons.find_in_page_outlined, size: 70, color: Colors.grey),
         const SizedBox(height: 16),
         Center(
           child: Text(
-            _searchController.text.isEmpty 
-              ? "No $_selectedStatus items found."
-              : "No matches for '${_searchController.text}'",
-            style: const TextStyle(fontSize: 16, color: Colors.grey),
+            "No results found in $_selectedStatus",
+            style: const TextStyle(color: Colors.grey, fontSize: 16),
           ),
         ),
       ],
@@ -222,99 +184,92 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildItemGrid() {
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
+        childAspectRatio: 0.8,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
       ),
       itemCount: _filteredItems.length,
       itemBuilder: (context, index) {
         final item = _filteredItems[index];
-        final bool isMine = item.userId == _service.currentUser?.id;
-
-        return Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () async {
-                        final result = await Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (c) => DetailsScreen(item: item)),
-                        );
-                        if (result == true) _loadData();
-                      },
-                      child: Image.network(
-                        item.imageUrl,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => 
-                          const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+        return GestureDetector(
+          onTap: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (c) => DetailsScreen(item: item)),
+            );
+            if (result == true) _loadData();
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              boxShadow: [
+                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Image with Type Badge
+                Expanded(
+                  child: Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                        child: Image.network(
+                          item.imageUrl,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => Container(color: Colors.grey[100], child: const Icon(Icons.image)),
+                        ),
                       ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.title,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      Positioned(
+                        top: 8,
+                        left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: item.type == 'lost' ? Colors.red : Colors.green,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            item.type.toUpperCase(),
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          item.description,
-                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              // Status Badge
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: item.type == 'lost' ? Colors.redAccent : Colors.greenAccent[700],
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    item.type.toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              // Delete Button
-              if (isMine)
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: IconButton(
-                    icon: const CircleAvatar(
-                      radius: 12,
-                      backgroundColor: Colors.black54,
-                      child: Icon(Icons.close, color: Colors.white, size: 14),
-                    ),
-                    onPressed: () => _confirmDelete(item),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, size: 12, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              item.locationName ?? "Unknown",
+                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         );
       },

@@ -74,10 +74,11 @@ class SupabaseService {
       // Extract storage path: userId/filename.jpg
       final uri = Uri.parse(item.imageUrl);
       final pathSegments = uri.pathSegments;
-      
+
       // Safety check for URL parsing
       if (pathSegments.length >= 2) {
-        final storagePath = "${pathSegments[pathSegments.length - 2]}/${pathSegments.last}";
+        final storagePath =
+            "${pathSegments[pathSegments.length - 2]}/${pathSegments.last}";
         await _client.storage.from('item-images').remove([storagePath]);
       }
 
@@ -99,7 +100,7 @@ class SupabaseService {
     String? location,
   ) async {
     String searchType = (currentType == 'lost') ? 'found' : 'lost';
-    
+
     // Take the first word of the title for a broader search
     String keyword = title.split(' ')[0];
 
@@ -136,6 +137,42 @@ class SupabaseService {
     if (permission == LocationPermission.deniedForever) return null;
 
     return await Geolocator.getCurrentPosition();
+  }
+
+  // --- USER STATS ---
+  Future<Map<String, int>> getUserStats() async {
+    final userId = currentUser?.id;
+    if (userId == null) return {'active': 0, 'resolved': 0};
+
+    final response = await _client
+        .from('items')
+        .select('status')
+        .eq('user_id', userId);
+
+    final items = response as List;
+    int active = items.where((i) => i['status'] == 'active').length;
+    int resolved = items.where((i) => i['status'] == 'resolved').length;
+
+    return {'active': active, 'resolved': resolved};
+  }
+
+  // --- SIGN OUT ---
+  Future<void> signOut() async {
+    await _client.auth.signOut();
+  }
+
+  // --- FETCH MY ITEMS ---
+  Future<List<ItemModel>> getMyItems() async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return [];
+
+    final response = await _client
+        .from('items')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+
+    return (response as List).map((item) => ItemModel.fromMap(item)).toList();
   }
 
   // --- AUTH ---
