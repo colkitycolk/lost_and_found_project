@@ -12,6 +12,7 @@ class SupabaseService {
       final response = await _client
           .from('items')
           .select()
+          .eq('status', 'active') // Fetch only active items
           .order('created_at', ascending: false);
       
       return (response as List).map((item) => ItemModel.fromMap(item)).toList();
@@ -65,6 +66,14 @@ class SupabaseService {
   // 3. Delete from Database
   await _client.from('items').delete().eq('id', item.id);
   }
+
+  Future<void> updateItemStatus(String itemId, String newStatus) async {
+  await _client
+      .from('items')
+      .update({'status': newStatus})
+      .eq('id', itemId);
+}
+
 
 
   // --- MATCHING ALGORITHM ---
