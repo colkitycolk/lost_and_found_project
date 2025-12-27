@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:share_plus/share_plus.dart'; // Standard sharing package
+import 'package:share_plus/share_plus.dart';
 import '../models/item_model.dart';
 import '../services/supabase_service.dart';
 import 'chat_screen.dart';
@@ -21,6 +21,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   bool _isUpdating = false;
   bool _isVerified = false;
 
+  /// Handles the actual database update
   Future<void> _updateStatus(String newStatus) async {
     setState(() => _isUpdating = true);
     try {
@@ -29,8 +30,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Item is now $newStatus")));
-        // We return 'true' to tell the previous screen to refresh the list
-        Navigator.pop(context, true);
+        Navigator.pop(context, true); // Refresh previous screen
       }
     } catch (e) {
       if (mounted) {
@@ -43,6 +43,39 @@ class _DetailsScreenState extends State<DetailsScreen> {
     }
   }
 
+  /// Confirmation dialog before toggling status
+  Future<void> _confirmStatusChange(String newStatus) async {
+    final bool isResolving = newStatus == 'resolved';
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isResolving ? "Mark as Resolved?" : "Re-activate Item?"),
+        content: Text(
+          isResolving
+              ? "This will hide the item from the main feed. Ensure the item has been returned/found."
+              : "This will make the item visible to all users again.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              "Confirm",
+              style: TextStyle(
+                color: isResolving ? Colors.green : Colors.orange,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) _updateStatus(newStatus);
+  }
+
   void _shareItem() {
     final String text =
         "Check out this ${widget.item.type} item: ${widget.item.title}\n\n"
@@ -52,6 +85,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
   }
 
   Future<void> _openInExternalMap() async {
+    // FIXED: Standard Google Maps Query format
     final String url =
         "https://www.google.com/maps/search/?api=1&query=${widget.item.latitude},${widget.item.longitude}";
     final Uri uri = Uri.parse(url);
@@ -91,13 +125,13 @@ class _DetailsScreenState extends State<DetailsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Text("Verify Ownership"),
+        title: const Text("Ownership Challenge"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              "Please answer the finder's question:",
+              "Answer the finder's question to chat:",
               style: TextStyle(fontSize: 13, color: Colors.grey),
             ),
             const SizedBox(height: 12),
@@ -129,7 +163,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
               Navigator.pop(context);
               _navigateToChat();
             },
-            child: const Text("Confirm & Chat"),
+            child: const Text("Verify & Chat"),
           ),
         ],
       ),
@@ -214,8 +248,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  const Divider(),
+                  const Divider(height: 30),
                   const Text(
                     "Description",
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -223,7 +256,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
                   const SizedBox(height: 8),
                   Text(
                     widget.item.description,
-                    style: const TextStyle(fontSize: 16, height: 1.5),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.5,
+                      color: Colors.black87,
+                    ),
                   ),
                   const SizedBox(height: 25),
                   if (hasLocation) ...[
@@ -278,8 +315,8 @@ class _DetailsScreenState extends State<DetailsScreen> {
                     Center(
                       child: TextButton.icon(
                         onPressed: _openInExternalMap,
-                        icon: const Icon(Icons.directions),
-                        label: const Text("Open in Google Maps"),
+                        icon: const Icon(Icons.map),
+                        label: const Text("Open Google Maps"),
                       ),
                     ),
                   ],
@@ -296,9 +333,9 @@ class _DetailsScreenState extends State<DetailsScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -4),
+              color: Colors.black12,
+              blurRadius: 4,
+              offset: const Offset(0, -2),
             ),
           ],
         ),
@@ -310,23 +347,17 @@ class _DetailsScreenState extends State<DetailsScreen> {
   Widget _buildBottomAction(bool isMine, bool isLost) {
     final String status = widget.item.status.toLowerCase();
 
-    // 1. If the item is RESOLVED
     if (status == 'resolved') {
-      if (isMine) {
-        // Owner sees the option to RE-ACTIVATE
-        return _buildOwnerButton(
-          label: "Re-activate Item",
-          color: Colors.orange,
-          statusToSet: "active",
-          icon: Icons.history,
-        );
-      } else {
-        // Others see a static badge
-        return _buildClosedBadge();
-      }
+      return isMine
+          ? _buildOwnerButton(
+              label: "Re-activate Item",
+              color: Colors.orange,
+              statusToSet: "active",
+              icon: Icons.refresh,
+            )
+          : _buildClosedBadge();
     }
 
-    // 2. If the item is ACTIVE
     if (isMine) {
       return _buildOwnerButton(
         label: "Mark as Resolved",
@@ -344,12 +375,11 @@ class _DetailsScreenState extends State<DetailsScreen> {
       decoration: BoxDecoration(
         color: Colors.grey[100],
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
       ),
       child: const Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.lock_outline, color: Colors.grey),
+          Icon(Icons.verified, color: Colors.green),
           SizedBox(width: 8),
           Text(
             "THIS CASE IS RESOLVED",
@@ -367,7 +397,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
     required IconData icon,
   }) {
     return ElevatedButton.icon(
-      onPressed: _isUpdating ? null : () => _updateStatus(statusToSet),
+      onPressed: _isUpdating ? null : () => _confirmStatusChange(statusToSet),
       icon: _isUpdating
           ? const SizedBox(
               width: 20,
@@ -391,10 +421,10 @@ class _DetailsScreenState extends State<DetailsScreen> {
   Widget _buildClaimButton(bool isLost) {
     return ElevatedButton.icon(
       onPressed: _handleClaimProcess,
-      icon: Icon(_isVerified ? Icons.chat_bubble : Icons.security),
+      icon: Icon(_isVerified ? Icons.chat : Icons.lock_outline),
       label: Text(
         _isVerified
-            ? "Continue to Chat"
+            ? "Chat with Owner"
             : (isLost ? "I Found This" : "This is mine"),
       ),
       style: ElevatedButton.styleFrom(
