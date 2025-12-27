@@ -186,7 +186,7 @@ class SupabaseService {
         .from('messages')
         .stream(primaryKey: ['id'])
         .eq('item_id', itemId)
-        .order('created_at', ascending: true)
+        .order('created_at', ascending: false)
         .map(
           (data) => data
               .where(
