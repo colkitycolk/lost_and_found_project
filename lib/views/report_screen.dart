@@ -21,7 +21,7 @@ class _ReportScreenState extends State<ReportScreen> {
   final _questionController = TextEditingController();
   final _service = SupabaseService();
 
-  String _itemType = 'found'; // Default to found
+  String _itemType = 'found'; 
   File? _selectedImage;
   bool _isUploading = false;
   bool _useVerification = false;
@@ -75,25 +75,32 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Future<void> _submitReport() async {
-    if (_titleController.text.isEmpty || _selectedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add a title and an image')),
-      );
+    final title = _titleController.text.trim();
+    
+    // 1. Title is always required
+    if (title.isEmpty) {
+      _showSnackBar('Please add a title');
+      return;
+    }
+
+    // 2. Image is required ONLY for 'found' items
+    if (_itemType == 'found' && _selectedImage == null) {
+      _showSnackBar('Please provide a photo for the found item');
       return;
     }
 
     setState(() => _isUploading = true);
 
     try {
-      // Logic: Only send verificationQuestion if the item is 'found'
       final String? finalQuestion = (_itemType == 'found' && _useVerification) 
           ? _questionController.text.trim() 
           : null;
 
+      // Call service - imageFile is now passed as nullable
       await _service.addItem(
-        title: _titleController.text.trim(),
+        title: title,
         description: _descController.text.trim(),
-        imageFile: _selectedImage!,
+        imageFile: _selectedImage, 
         type: _itemType,
         locationName: _locationController.text.trim(),
         lat: _lat,
@@ -102,7 +109,7 @@ class _ReportScreenState extends State<ReportScreen> {
       );
 
       final matches = await _service.findMatches(
-        _titleController.text.trim(),
+        title,
         _itemType,
         _locationController.text.trim(),
       );
@@ -112,18 +119,18 @@ class _ReportScreenState extends State<ReportScreen> {
           _showMatchDialog(matches);
         } else {
           Navigator.pop(context, true);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Reported successfully!')),
-          );
+          _showSnackBar('Reported successfully!');
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
-      }
+      if (mounted) _showSnackBar('Upload failed: $e');
     } finally {
       if (mounted) setState(() => _isUploading = false);
     }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showMatchDialog(List<ItemModel> matches) {
@@ -141,9 +148,26 @@ class _ReportScreenState extends State<ReportScreen> {
             itemBuilder: (context, index) {
               final match = matches[index];
               return ListTile(
-                leading: Image.network(match.imageUrl, width: 50, height: 50, fit: BoxFit.cover),
+                // Handle null images in the match list to prevent crashes
+                leading: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: (match.imageUrl == null || match.imageUrl!.isEmpty)
+                    ? Container(
+                        width: 50, 
+                        height: 50, 
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.image_not_supported, size: 20),
+                      )
+                    : Image.network(
+                        match.imageUrl!, 
+                        width: 50, 
+                        height: 50, 
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => const Icon(Icons.broken_image),
+                      ),
+                ),
                 title: Text(match.title),
-                subtitle: Text(match.locationName ?? ""),
+                subtitle: Text(match.locationName ?? "No location set"),
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => DetailsScreen(item: match)),
@@ -167,6 +191,8 @@ class _ReportScreenState extends State<ReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isImageRequired = _itemType == 'found';
+
     return Scaffold(
       appBar: AppBar(title: const Text('Report an Item')),
       body: SafeArea(
@@ -185,7 +211,6 @@ class _ReportScreenState extends State<ReportScreen> {
                   onSelectionChanged: (newSelection) {
                     setState(() {
                       _itemType = newSelection.first;
-                      // Logic: If user switches to 'lost', disable verification toggle
                       if (_itemType == 'lost') {
                         _useVerification = false;
                         _questionController.clear();
@@ -196,7 +221,7 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
               const SizedBox(height: 25),
 
-              // Image Picker UI
+              _buildLabel(isImageRequired ? "Add Photo (Required) *" : "Add Photo (Optional)"),
               GestureDetector(
                 onTap: _pickImage,
                 child: Container(
@@ -205,15 +230,23 @@ class _ReportScreenState extends State<ReportScreen> {
                   decoration: BoxDecoration(
                     color: Colors.grey[100],
                     borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.grey[300]!),
+                    border: Border.all(
+                      color: (isImageRequired && _selectedImage == null) 
+                          ? Colors.redAccent 
+                          : Colors.grey[300]!,
+                    ),
                   ),
                   child: _selectedImage != null
                       ? ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.file(_selectedImage!, fit: BoxFit.cover))
-                      : const Column(
+                      : Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.camera_alt, size: 40, color: Colors.blue),
-                            Text("Add Photo"),
+                            Icon(
+                              Icons.camera_alt, 
+                              size: 40, 
+                              color: isImageRequired ? Colors.redAccent : Colors.blue
+                            ),
+                            Text(isImageRequired ? "Photo Required" : "Add Photo"),
                           ],
                         ),
                 ),
@@ -223,7 +256,7 @@ class _ReportScreenState extends State<ReportScreen> {
               _buildLabel("Item Title"),
               TextField(
                 controller: _titleController,
-                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "What did you find/lose?"),
+                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "e.g., Black Wallet"),
               ),
               const SizedBox(height: 15),
 
@@ -234,7 +267,7 @@ class _ReportScreenState extends State<ReportScreen> {
                     child: TextField(
                       controller: _locationController,
                       decoration: const InputDecoration(
-                        hintText: 'Describe or pick on map',
+                        hintText: 'Where?',
                         prefixIcon: Icon(Icons.location_on),
                         border: OutlineInputBorder(),
                       ),
@@ -244,7 +277,6 @@ class _ReportScreenState extends State<ReportScreen> {
                   IconButton.filledTonal(
                     onPressed: _pickLocationOnMap,
                     icon: const Icon(Icons.map),
-                    tooltip: "Pick on Map",
                   ),
                 ],
               ),
@@ -254,17 +286,16 @@ class _ReportScreenState extends State<ReportScreen> {
               TextField(
                 controller: _descController,
                 maxLines: 3,
-                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "Color, brand, etc."),
+                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: "Color, brand, markings..."),
               ),
               
-              // CONDITIONAL SECURITY SECTION
               if (_itemType == 'found') ...[
                 const SizedBox(height: 20),
                 const Divider(),
                 _buildLabel("Security Verification"),
                 SwitchListTile(
                   title: const Text("Ask a Question"),
-                  subtitle: const Text("Require claimants to prove ownership"),
+                  subtitle: const Text("Ownership verification for chat"),
                   value: _useVerification,
                   contentPadding: EdgeInsets.zero,
                   onChanged: (val) => setState(() => _useVerification = val),
@@ -273,8 +304,7 @@ class _ReportScreenState extends State<ReportScreen> {
                   TextField(
                     controller: _questionController,
                     decoration: const InputDecoration(
-                      labelText: "Verification Question",
-                      hintText: "e.g., What color is the phone case?",
+                      labelText: "Question",
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -288,14 +318,15 @@ class _ReportScreenState extends State<ReportScreen> {
                 child: ElevatedButton(
                   onPressed: _isUploading ? null : _submitReport,
                   style: ElevatedButton.styleFrom(
+                    backgroundColor: _itemType == 'found' ? Colors.blue : Colors.orange,
+                    foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: _isUploading 
-                      ? const CircularProgressIndicator() 
+                      ? const CircularProgressIndicator(color: Colors.white) 
                       : const Text("Submit Report", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
-              const SizedBox(height: 40),
             ],
           ),
         ),

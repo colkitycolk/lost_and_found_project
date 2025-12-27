@@ -27,9 +27,9 @@ class _MyItemsScreenState extends State<MyItemsScreen> {
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error: $e")),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text("Error: $e")));
         }
       }
     }
@@ -48,7 +48,9 @@ class _MyItemsScreenState extends State<MyItemsScreen> {
           final items = snapshot.data ?? [];
 
           if (items.isEmpty) {
-            return const Center(child: Text("You haven't reported any items yet."));
+            return const Center(
+              child: Text("You haven't reported any items yet."),
+            );
           }
 
           return ListView.builder(
@@ -61,7 +63,24 @@ class _MyItemsScreenState extends State<MyItemsScreen> {
                 child: ListTile(
                   leading: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(item.imageUrl, width: 50, height: 50, fit: BoxFit.cover),
+                    child: (item.imageUrl == null || item.imageUrl!.isEmpty)
+                        ? Container(
+                            width: 50,
+                            height: 50,
+                            color: Colors.grey[200],
+                            child: const Icon(
+                              Icons.image_not_supported,
+                              size: 20,
+                            ),
+                          )
+                        : Image.network(
+                            item.imageUrl!,
+                            width: 50,
+                            height: 50,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.broken_image),
+                          ),
                   ),
                   title: Text(item.title),
                   subtitle: Text("Status: ${item.status}"),
@@ -70,8 +89,10 @@ class _MyItemsScreenState extends State<MyItemsScreen> {
                     onPressed: () => _handleDelete(item),
                   ),
                   onTap: () => Navigator.push(
-                    context, 
-                    MaterialPageRoute(builder: (c) => DetailsScreen(item: item))
+                    context,
+                    MaterialPageRoute(
+                      builder: (c) => DetailsScreen(item: item),
+                    ),
                   ),
                 ),
               );

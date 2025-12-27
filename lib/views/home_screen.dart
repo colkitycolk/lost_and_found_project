@@ -13,11 +13,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _service = SupabaseService();
   final _searchController = TextEditingController();
-  
+
   bool _isLoading = true;
-  List<ItemModel> _allItems = [];      
-  List<ItemModel> _filteredItems = []; 
-  String _selectedStatus = 'active'; 
+  List<ItemModel> _allItems = [];
+  List<ItemModel> _filteredItems = [];
+  String _selectedStatus = 'active';
 
   @override
   void initState() {
@@ -39,16 +39,16 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _allItems = items;
-          _runSearch(_searchController.text); 
+          _runSearch(_searchController.text);
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error loading items: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error loading items: $e")));
       }
     }
   }
@@ -73,7 +73,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Community Feed', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Community Feed',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
@@ -113,15 +116,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          
+
           Expanded(
             child: RefreshIndicator(
               onRefresh: _loadData,
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _filteredItems.isEmpty
-                      ? _buildEmptyState()
-                      : _buildItemGrid(),
+                  ? _buildEmptyState()
+                  : _buildItemGrid(),
             ),
           ),
         ],
@@ -207,7 +210,11 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(15),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
               ],
             ),
             child: Column(
@@ -218,26 +225,53 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Stack(
                     children: [
                       ClipRRect(
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                        child: Image.network(
-                          item.imageUrl,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => Container(color: Colors.grey[100], child: const Icon(Icons.image)),
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(15),
                         ),
+                        child: (item.imageUrl == null || item.imageUrl!.isEmpty)
+                            ? Container(
+                                width: double.infinity,
+                                color: Colors.grey[100],
+                                child: const Icon(
+                                  Icons.image_outlined,
+                                  color: Colors.grey,
+                                  size: 40,
+                                ),
+                              )
+                            : Image.network(
+                                item.imageUrl!,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (c, e, s) => Container(
+                                  color: Colors.grey[100],
+                                  child: const Icon(
+                                    Icons.broken_image,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
                       ),
                       Positioned(
                         top: 8,
                         left: 8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: item.type == 'lost' ? Colors.red : Colors.green,
+                            color: item.type == 'lost'
+                                ? Colors.red
+                                : Colors.green,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
                             item.type.toUpperCase(),
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -249,16 +283,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(
+                        item.title,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.location_on_outlined, size: 12, color: Colors.grey),
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 12,
+                            color: Colors.grey,
+                          ),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               item.locationName ?? "Unknown",
-                              style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),

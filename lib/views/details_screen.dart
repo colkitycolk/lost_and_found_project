@@ -209,11 +209,36 @@ class _DetailsScreenState extends State<DetailsScreen> {
               child: AspectRatio(
                 aspectRatio: 16 / 9,
                 child: Container(
-                  color: Colors.black,
-                  child: Image.network(
-                    widget.item.imageUrl,
-                    fit: BoxFit.contain,
-                  ),
+                  color:
+                      Colors.grey[200], // Background for empty/loading states
+                  child:
+                      (widget.item.imageUrl == null ||
+                          widget.item.imageUrl!.isEmpty)
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.image_not_supported_outlined,
+                              size: 50,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "No photo provided",
+                              style: TextStyle(color: Colors.grey[600]),
+                            ),
+                          ],
+                        )
+                      : Image.network(
+                          widget.item.imageUrl!,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                                Icons.broken_image,
+                                size: 50,
+                                color: Colors.grey,
+                              ),
+                        ),
                 ),
               ),
             ),

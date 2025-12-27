@@ -27,40 +27,47 @@ class SupabaseService {
   }
 
   // --- UPLOAD & REPORT ---
-  // FIXED: Added verificationQuestion to the parameters
   Future<void> addItem({
     required String title,
     required String description,
-    required File imageFile,
     required String type,
+    File? imageFile, // CHANGED: Made nullable
     String? locationName,
     double? lat,
     double? lng,
-    String? verificationQuestion, // NEW PARAMETER
+    String? verificationQuestion,
   }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception("User not authenticated");
 
     try {
-      // 1. Storage Upload
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final path = '${user.id}/$fileName';
+      String? imageUrl;
 
-      await _client.storage.from('item-images').upload(path, imageFile);
-      final imageUrl = _client.storage.from('item-images').getPublicUrl(path);
+      // 1. Conditional Storage Upload
+      if (imageFile != null) {
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final path = '${user.id}/$fileName';
+
+        await _client.storage.from('item-images').upload(path, imageFile);
+        imageUrl = _client.storage.from('item-images').getPublicUrl(path);
+      } else {
+        // OPTIONAL: Use a specific constant or null.
+        // If your DB allows null, you can leave this as null.
+        imageUrl = null;
+      }
 
       // 2. Database Insert
       await _client.from('items').insert({
         'title': title,
         'description': description,
-        'image_url': imageUrl,
+        'image_url': imageUrl, // Will save the URL or NULL to the DB
         'user_id': user.id,
         'type': type,
         'location_name': locationName,
         'latitude': lat,
         'longitude': lng,
         'status': 'active',
-        'verification_question': verificationQuestion, // SAVING TO DB
+        'verification_question': verificationQuestion,
       });
     } catch (e) {
       print("Add Item Error: $e");
@@ -71,17 +78,19 @@ class SupabaseService {
   // --- DELETE ITEM ---
   Future<void> deleteItem(ItemModel item) async {
     try {
-      // Extract storage path: userId/filename.jpg
-      final uri = Uri.parse(item.imageUrl);
-      final pathSegments = uri.pathSegments;
+      // 1. Only attempt to delete from storage if an image exists
+      if (item.imageUrl != null && item.imageUrl!.isNotEmpty) {
+        final uri = Uri.parse(item.imageUrl!);
+        final pathSegments = uri.pathSegments;
 
-      // Safety check for URL parsing
-      if (pathSegments.length >= 2) {
-        final storagePath =
-            "${pathSegments[pathSegments.length - 2]}/${pathSegments.last}";
-        await _client.storage.from('item-images').remove([storagePath]);
+        if (pathSegments.length >= 2) {
+          final storagePath =
+              "${pathSegments[pathSegments.length - 2]}/${pathSegments.last}";
+          await _client.storage.from('item-images').remove([storagePath]);
+        }
       }
 
+      // 2. Delete the row from the database
       await _client.from('items').delete().eq('id', item.id);
     } catch (e) {
       print("Delete Error: $e");
