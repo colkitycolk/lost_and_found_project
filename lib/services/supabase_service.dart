@@ -10,6 +10,8 @@ class SupabaseService {
   // Getter for current user
   User? get currentUser => _client.auth.currentUser;
 
+  SupabaseClient get instance => _client;
+  
   // --- FETCH DATA ---
   Future<List<ItemModel>> getItems({String status = 'active'}) async {
     try {
@@ -197,15 +199,12 @@ class SupabaseService {
         .eq('item_id', itemId)
         .order('created_at', ascending: false)
         .map(
-          (data) => data
-              .where(
-                (msg) =>
-                    (msg['sender_id'] == myId &&
-                        msg['receiver_id'] == otherUserId) ||
-                    (msg['sender_id'] == otherUserId &&
-                        msg['receiver_id'] == myId),
-              )
-              .toList(),
+          (data) => data.where((msg) {
+            final s = msg['sender_id'];
+            final r = msg['receiver_id'];
+            return (s == myId && r == otherUserId) ||
+                (s == otherUserId && r == myId);
+          }).toList(),
         );
   }
 
@@ -255,6 +254,40 @@ class SupabaseService {
     final data = await _client.from('items').select().eq('id', id).single();
     return ItemModel.fromMap(data);
   }
+
+  // --- BLOCKING LOGIC ---
+  Future<void> blockUser(String targetUserId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+
+    await _client.from('blocks').insert({
+      'blocker_id': myId,
+      'blocked_id': targetUserId,
+    });
+  }
+
+  Future<bool> isUserBlocked(String otherUserId) async {
+  final myId = currentUser?.id;
+  if (myId == null) return false;
+
+  final response = await _client
+      .from('blocks')
+      .select()
+      .or('and(blocker_id.eq.$myId,blocked_id.eq.$otherUserId),and(blocker_id.eq.$otherUserId,blocked_id.eq.$myId)');
+
+  return (response as List).isNotEmpty;
+}
+
+Future<void> unblockUser(String targetUserId) async {
+  final myId = currentUser?.id;
+  if (myId == null) return;
+
+  await _client
+      .from('blocks')
+      .delete()
+      .eq('blocker_id', myId)
+      .eq('blocked_id', targetUserId);
+}
 
   // --- AUTH ---
   Future<AuthResponse> signIn(String email, String password) async {

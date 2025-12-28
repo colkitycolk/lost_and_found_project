@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/supabase_service.dart';
 import '../models/item_model.dart';
 import 'details_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,10 +36,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
+      // 1. Fetch blocked user IDs first to filter the feed
+      final myId = _service.currentUser?.id;
+      List<String> blockedIds = [];
+      if (myId != null) {
+        final blockData = await Supabase.instance.client
+            .from('blocks')
+            .select('blocked_id')
+            .eq('blocker_id', myId);
+        blockedIds = (blockData as List).map((b) => b['blocked_id'].toString()).toList();
+      }
+
+      // 2. Fetch items from service
       final items = await _service.getItems(status: _selectedStatus);
+      
       if (mounted) {
         setState(() {
-          _allItems = items;
+          // 3. Filter out items posted by blocked users
+          _allItems = items.where((item) => !blockedIds.contains(item.userId)).toList();
           _runSearch(_searchController.text);
           _isLoading = false;
         });
@@ -46,9 +61,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error loading items: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error loading feed: $e")),
+        );
       }
     }
   }
@@ -73,14 +88,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text(
-          'Community Feed',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('Community Feed', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
-        // The Search Bar is now integrated more cleanly
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Padding(
@@ -93,11 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 prefixIcon: const Icon(Icons.search, color: Colors.blueAccent),
                 filled: true,
                 fillColor: Colors.grey[100],
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(15),
-                  borderSide: BorderSide.none,
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
               ),
             ),
           ),
@@ -105,7 +112,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // Elegant Filter Row
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
@@ -116,20 +122,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-
           Expanded(
             child: RefreshIndicator(
               onRefresh: _loadData,
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _filteredItems.isEmpty
-                  ? _buildEmptyState()
-                  : _buildItemGrid(),
+                      ? _buildEmptyState()
+                      : _buildItemGrid(),
             ),
           ),
         ],
       ),
-      // FAB stays here for quick reporting
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           final result = await Navigator.pushNamed(context, '/report');
@@ -157,13 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
           color: isSelected ? Colors.blueAccent : Colors.grey[200],
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.black87,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
+        child: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
       ),
     );
   }
@@ -175,12 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
         SizedBox(height: MediaQuery.of(context).size.height * 0.2),
         const Icon(Icons.find_in_page_outlined, size: 70, color: Colors.grey),
         const SizedBox(height: 16),
-        Center(
-          child: Text(
-            "No results found in $_selectedStatus",
-            style: const TextStyle(color: Colors.grey, fontSize: 16),
-          ),
-        ),
+        Center(child: Text("No items found", style: const TextStyle(color: Colors.grey, fontSize: 16))),
       ],
     );
   }
@@ -209,70 +202,26 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(15),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Image with Type Badge
                 Expanded(
                   child: Stack(
                     children: [
                       ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(15),
-                        ),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
                         child: (item.imageUrl == null || item.imageUrl!.isEmpty)
-                            ? Container(
-                                width: double.infinity,
-                                color: Colors.grey[100],
-                                child: const Icon(
-                                  Icons.image_outlined,
-                                  color: Colors.grey,
-                                  size: 40,
-                                ),
-                              )
-                            : Image.network(
-                                item.imageUrl!,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (c, e, s) => Container(
-                                  color: Colors.grey[100],
-                                  child: const Icon(
-                                    Icons.broken_image,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ),
+                            ? Container(width: double.infinity, color: Colors.grey[100], child: const Icon(Icons.image_outlined, color: Colors.grey, size: 40))
+                            : Image.network(item.imageUrl!, width: double.infinity, fit: BoxFit.cover),
                       ),
                       Positioned(
-                        top: 8,
-                        left: 8,
+                        top: 8, left: 8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: item.type == 'lost'
-                                ? Colors.red
-                                : Colors.green,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            item.type.toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(color: item.type == 'lost' ? Colors.red : Colors.green, borderRadius: BorderRadius.circular(8)),
+                          child: Text(item.type.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     ],
@@ -283,32 +232,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        item.title,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(
-                            Icons.location_on_outlined,
-                            size: 12,
-                            color: Colors.grey,
-                          ),
+                          const Icon(Icons.location_on_outlined, size: 12, color: Colors.grey),
                           const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              item.locationName ?? "Unknown",
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
+                          Expanded(child: Text(item.locationName ?? "Unknown", style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
                         ],
                       ),
                     ],
