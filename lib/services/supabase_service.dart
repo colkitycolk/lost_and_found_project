@@ -315,6 +315,13 @@ class SupabaseService {
         .eq('blocked_id', targetUserId);
   }
 
+  Future<List<Map<String, dynamic>>> getAiMatches() async {
+  return await _client
+      .from('matches')
+      .select('*, lost_item:lost_item_id(*), found_item:found_item_id(*)')
+      .order('similarity_score', ascending: false);
+}
+
   // --- AUTH ---
   Future<AuthResponse> signIn(String email, String password) async {
     return await _client.auth.signInWithPassword(
