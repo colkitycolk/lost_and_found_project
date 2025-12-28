@@ -11,7 +11,7 @@ class SupabaseService {
   User? get currentUser => _client.auth.currentUser;
 
   SupabaseClient get instance => _client;
-  
+
   // --- FETCH DATA ---
   Future<List<ItemModel>> getItems({String status = 'active'}) async {
     try {
@@ -267,27 +267,42 @@ class SupabaseService {
   }
 
   Future<bool> isUserBlocked(String otherUserId) async {
-  final myId = currentUser?.id;
-  if (myId == null) return false;
+    final myId = currentUser?.id;
+    if (myId == null) return false;
 
-  final response = await _client
-      .from('blocks')
-      .select()
-      .or('and(blocker_id.eq.$myId,blocked_id.eq.$otherUserId),and(blocker_id.eq.$otherUserId,blocked_id.eq.$myId)');
+    final response = await _client
+        .from('blocks')
+        .select()
+        .or(
+          'and(blocker_id.eq.$myId,blocked_id.eq.$otherUserId),and(blocker_id.eq.$otherUserId,blocked_id.eq.$myId)',
+        );
 
-  return (response as List).isNotEmpty;
-}
+    return (response as List).isNotEmpty;
+  }
 
-Future<void> unblockUser(String targetUserId) async {
-  final myId = currentUser?.id;
-  if (myId == null) return;
+  // --- VERIFY CLAIMANT ---
+  Future<void> verifyClaimant(String itemId, String claimantId) async {
+    // Logic: Mark the item as resolved or update a 'verified_claims' table
+    await _client.from('items').update({'status': 'resolved'}).eq('id', itemId);
 
-  await _client
-      .from('blocks')
-      .delete()
-      .eq('blocker_id', myId)
-      .eq('blocked_id', targetUserId);
-}
+    // Optional: Send a system message
+    await sendMessage(
+      itemId,
+      claimantId,
+      "✅ The finder has verified your claim! This item is now resolved.",
+    );
+  }
+
+  Future<void> unblockUser(String targetUserId) async {
+    final myId = currentUser?.id;
+    if (myId == null) return;
+
+    await _client
+        .from('blocks')
+        .delete()
+        .eq('blocker_id', myId)
+        .eq('blocked_id', targetUserId);
+  }
 
   // --- AUTH ---
   Future<AuthResponse> signIn(String email, String password) async {
