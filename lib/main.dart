@@ -7,9 +7,9 @@ import 'views/main_wrapper.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(
-    url: 'https://banykdabftrzqbuhlcvl.supabase.co',
+    url: 'http://192.168.137.1:60021',
     anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJhbnlrZGFiZnRyenFidWhsY3ZsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYzMjA2MTEsImV4cCI6MjA4MTg5NjYxMX0._CRZtLWCTdlxqcV5PBNYWcQbu-sJ8TiB01HTkyBd8Ek',
+        'sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH',
   );
   runApp(const MyApp());
 }

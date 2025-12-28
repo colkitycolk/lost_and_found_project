@@ -2,12 +2,13 @@ class ItemModel {
   final String id;
   final String title;
   final String description;
-  final String? imageUrl; // CHANGED: Made nullable
-  final String type; // 'lost' or 'found'
+  final String? imageUrl;
+  final String type;
   final String? locationName;
   final double? latitude;
   final double? longitude;
   final String userId;
+  final String? userName; // NEW: To store the finder's name
   final String status;
   final String? verificationQuestion;
 
@@ -15,47 +16,34 @@ class ItemModel {
     required this.id,
     required this.title,
     required this.description,
-    this.imageUrl, // CHANGED: No longer required
+    this.imageUrl,
     required this.type,
     this.locationName,
     this.latitude,
     this.longitude,
     required this.userId,
+    this.userName, // NEW
     required this.status,
     this.verificationQuestion,
   });
 
   factory ItemModel.fromMap(Map<String, dynamic> map) {
+    // Check if profile data was joined in the query
+    final profile = map['profiles'] as Map<String, dynamic>?;
+
     return ItemModel(
       id: map['id'].toString(),
       title: map['title'] ?? 'Untitled',
       description: map['description'] ?? '',
-      // If image_url is null in DB, it becomes null in our app
-      imageUrl: map['image_url'], 
+      imageUrl: map['image_url'],
       type: map['type'] ?? 'found',
       locationName: map['location_name'],
-      // Safe conversion for numeric types
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
       userId: map['user_id'] ?? '',
+      userName: profile?['full_name'] ?? 'Unknown', // NEW: Extract joined name
       status: map['status'] ?? 'active',
       verificationQuestion: map['verification_question'],
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id, // Added ID for completeness
-      'title': title,
-      'description': description,
-      'image_url': imageUrl, 
-      'type': type,
-      'location_name': locationName,
-      'latitude': latitude,
-      'longitude': longitude,
-      'user_id': userId,
-      'status': status,
-      'verification_question': verificationQuestion,
-    };
   }
 }

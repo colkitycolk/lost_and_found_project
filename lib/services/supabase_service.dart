@@ -17,7 +17,7 @@ class SupabaseService {
     try {
       final response = await _client
           .from('items')
-          .select()
+          .select('*, profiles(full_name)') // FIX: Joins profiles table
           .eq('status', status)
           .order('created_at', ascending: false);
 
@@ -33,7 +33,7 @@ class SupabaseService {
     required String title,
     required String description,
     required String type,
-    File? imageFile, // CHANGED: Made nullable
+    File? imageFile,
     String? locationName,
     double? lat,
     double? lng,
@@ -45,24 +45,18 @@ class SupabaseService {
     try {
       String? imageUrl;
 
-      // 1. Conditional Storage Upload
       if (imageFile != null) {
         final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
         final path = '${user.id}/$fileName';
 
         await _client.storage.from('item-images').upload(path, imageFile);
         imageUrl = _client.storage.from('item-images').getPublicUrl(path);
-      } else {
-        // OPTIONAL: Use a specific constant or null.
-        // If your DB allows null, you can leave this as null.
-        imageUrl = null;
       }
 
-      // 2. Database Insert
       await _client.from('items').insert({
         'title': title,
         'description': description,
-        'image_url': imageUrl, // Will save the URL or NULL to the DB
+        'image_url': imageUrl,
         'user_id': user.id,
         'type': type,
         'location_name': locationName,
@@ -80,7 +74,6 @@ class SupabaseService {
   // --- DELETE ITEM ---
   Future<void> deleteItem(ItemModel item) async {
     try {
-      // 1. Only attempt to delete from storage if an image exists
       if (item.imageUrl != null && item.imageUrl!.isNotEmpty) {
         final uri = Uri.parse(item.imageUrl!);
         final pathSegments = uri.pathSegments;
@@ -92,7 +85,6 @@ class SupabaseService {
         }
       }
 
-      // 2. Delete the row from the database
       await _client.from('items').delete().eq('id', item.id);
     } catch (e) {
       print("Delete Error: $e");
@@ -111,15 +103,13 @@ class SupabaseService {
     String? location,
   ) async {
     String searchType = (currentType == 'lost') ? 'found' : 'lost';
-
-    // Take the first word of the title for a broader search
     String keyword = title.split(' ')[0];
 
     var query = _client
         .from('items')
-        .select()
+        .select('*, profiles(full_name)') // FIX: Joins profiles table
         .eq('type', searchType)
-        .eq('status', 'active') // Only match against active items
+        .eq('status', 'active')
         .ilike('title', '%$keyword%')
         .neq('user_id', _client.auth.currentUser?.id ?? '');
 
@@ -179,36 +169,57 @@ class SupabaseService {
 
     final response = await _client
         .from('items')
-        .select()
+        .select('*, profiles(full_name)') // FIX: Joins profiles table
         .eq('user_id', userId)
         .order('created_at', ascending: false);
 
     return (response as List).map((item) => ItemModel.fromMap(item)).toList();
   }
 
-  // Stream for real-time messages between two users for a specific item
+  // Stream for real-time messages
   Stream<List<Map<String, dynamic>>> getChatStream(
     String itemId,
     String otherUserId,
   ) {
     final myId = _client.auth.currentUser!.id;
 
+    // We let the database handle the heavy lifting.
+    // This stream only listens for messages belonging to this specific item.
     return _client
         .from('messages')
         .stream(primaryKey: ['id'])
         .eq('item_id', itemId)
         .order('created_at', ascending: false)
-        .map(
-          (data) => data.where((msg) {
+        .map((data) {
+          // Now we only filter for the two participants
+          return data.where((msg) {
             final s = msg['sender_id'];
             final r = msg['receiver_id'];
             return (s == myId && r == otherUserId) ||
                 (s == otherUserId && r == myId);
-          }).toList(),
-        );
+          }).toList();
+        });
   }
 
-  // Send a message to another user regarding a specific item
+  Future<List<Map<String, dynamic>>> getChatMessages(
+    String itemId,
+    String otherUserId,
+  ) async {
+    final myId = _client.auth.currentUser!.id;
+
+    final response = await _client
+        .from('messages')
+        .select()
+        .eq('item_id', itemId)
+        .or(
+          'and(sender_id.eq.$myId,receiver_id.eq.$otherUserId),and(sender_id.eq.$otherUserId,receiver_id.eq.$myId)',
+        )
+        .order('created_at', ascending: false);
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  // Send a message
   Future<void> sendMessage(
     String itemId,
     String receiverId,
@@ -225,7 +236,6 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getMyConversations() async {
     final userId = _client.auth.currentUser!.id;
 
-    // Gets all messages where you are the sender or receiver
     final response = await _client
         .from('messages')
         .select('*, items(title, image_url)')
@@ -241,7 +251,6 @@ class SupabaseService {
           : msg['sender_id'];
       final String chatKey = "${msg['item_id']}_$otherId";
 
-      // Only store the most recent message for each unique conversation
       if (!latestChats.containsKey(chatKey)) {
         latestChats[chatKey] = msg;
       }
@@ -251,7 +260,11 @@ class SupabaseService {
 
   // --- FETCH ITEM BY ID ---
   Future<ItemModel?> getItemById(String id) async {
-    final data = await _client.from('items').select().eq('id', id).single();
+    final data = await _client
+        .from('items')
+        .select('*, profiles(full_name)') // FIX: Joins profiles table
+        .eq('id', id)
+        .single();
     return ItemModel.fromMap(data);
   }
 
@@ -282,10 +295,8 @@ class SupabaseService {
 
   // --- VERIFY CLAIMANT ---
   Future<void> verifyClaimant(String itemId, String claimantId) async {
-    // Logic: Mark the item as resolved or update a 'verified_claims' table
     await _client.from('items').update({'status': 'resolved'}).eq('id', itemId);
 
-    // Optional: Send a system message
     await sendMessage(
       itemId,
       claimantId,
@@ -312,7 +323,15 @@ class SupabaseService {
     );
   }
 
-  Future<AuthResponse> signUp(String email, String password) async {
-    return await _client.auth.signUp(email: email, password: password);
+  Future<AuthResponse> signUp(
+    String email,
+    String password,
+    String name,
+  ) async {
+    return await _client.auth.signUp(
+      email: email,
+      password: password,
+      data: {'full_name': name}, // Passes name for the trigger
+    );
   }
 }

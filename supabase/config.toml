@@ -1,0 +1,52 @@
+project_id = "lost_and_found_project"
+
+[api]
+enabled = true
+port = 60021
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 60022
+# MOVED: Shadow port moved out of the forbidden range
+shadow_port = 60020 
+major_version = 17
+
+[db.pooler]
+enabled = false
+# MOVED: Pooler port moved out of the forbidden range
+port = 60029 
+
+[realtime]
+# DISABLED: Saves RAM and avoids port conflicts
+enabled = false 
+
+[studio]
+enabled = true
+port = 60023
+api_url = "http://127.0.0.1"
+
+[inbucket]
+enabled = true
+port = 60024
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+enable_signup = true
+
+[auth.email]
+enable_confirmations = false
+
+[edge_runtime]
+# DISABLED: Since you are running the AI locally on your laptop CPU/Python
+enabled = false 
+
+[analytics]
+# DISABLED: This is the heaviest service; turning it off will make your laptop much faster
+enabled = false

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/supabase_service.dart';
+import 'signup_screen.dart'; // Import the new screen
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,7 +15,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _service = SupabaseService();
   
   bool _isLoading = false;
-  bool _obscurePassword = true; // For password visibility toggle
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -23,11 +24,10 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<void> _handleAuth(bool isLogin) async {
+  Future<void> _handleLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // Basic Validation
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields')),
@@ -38,20 +38,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     
     try {
-      if (isLogin) {
-        await _service.signIn(email, password);
-      } else {
-        await _service.signUp(email, password);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Account created! Check your email for confirmation.'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-      
+      await _service.signIn(email, password);
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/home');
       }
@@ -59,7 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Auth Error: ${e.toString()}'),
+            content: Text('Login Error: ${e.toString()}'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -72,7 +59,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Using SafeArea and SingleChildScrollView prevents "Bottom Overflow" when keyboard appears
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -81,26 +67,20 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Branding Section
                 const Icon(Icons.location_on_rounded, size: 100, color: Colors.blueAccent),
                 const SizedBox(height: 10),
                 const Text(
                   'Lost & Found',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32, 
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                 ),
                 Text(
-                  'Your campus community finder',
+                  'Welcome back!',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.grey[600], fontSize: 16),
                 ),
                 const SizedBox(height: 50),
 
-                // Email Input
                 TextField(
                   controller: _emailController,
                   decoration: InputDecoration(
@@ -112,7 +92,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Password Input
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
@@ -128,11 +107,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 30),
 
-                // Action Buttons
                 SizedBox(
                   height: 55,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : () => _handleAuth(true),
+                    onPressed: _isLoading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueAccent,
                       foregroundColor: Colors.white,
@@ -146,7 +124,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 15),
                 
                 TextButton(
-                  onPressed: _isLoading ? null : () => _handleAuth(false),
+                  onPressed: () => Navigator.push(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const SignUpScreen())
+                  ),
                   child: Text(
                     "New here? Create an account",
                     style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.w600),
