@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/item_model.dart';
+import '../models/match_model.dart';
 import 'package:geolocator/geolocator.dart';
 
 class SupabaseService {
@@ -93,8 +94,26 @@ class SupabaseService {
   }
 
   Future<void> updateItemStatus(String itemId, String newStatus) async {
-    await _client.from('items').update({'status': newStatus}).eq('id', itemId);
+  final user = _client.auth.currentUser;
+
+  if (user == null) {
+    throw Exception("Authentication required: No user found in current session.");
   }
+
+  try {
+    // We add .eq('user_id', user.id) to match the RLS policy requirement
+    await _client
+        .from('items')
+        .update({'status': newStatus})
+        .eq('id', itemId)
+        .eq('user_id', user.id); 
+    
+    print("Item $itemId status updated to $newStatus successfully.");
+  } catch (e) {
+    print("Error updating status: $e");
+    rethrow;
+  }
+}
 
   // --- MATCHING ALGORITHM ---
   Future<List<ItemModel>> findMatches(
@@ -322,6 +341,25 @@ class SupabaseService {
       .order('similarity_score', ascending: false);
 }
 
+Future<List<MatchModel>> getMatchesForItem(String itemId) async {
+  final userId = _client.auth.currentUser!.id;
+  
+  // This query gets the match AND the details of both items involved
+  final response = await _client
+      .from('matches')
+      .select('''
+        id,
+        similarity_score,
+        lost_item:lost_item_id(*, profiles(full_name)),
+        found_item:found_item_id(*, profiles(full_name))
+      ''')
+      .or('lost_item_id.eq.$itemId,found_item_id.eq.$itemId')
+      .order('similarity_score', ascending: false);
+
+  return (response as List)
+      .map((m) => MatchModel.fromMap(m, userId))
+      .toList();
+}
   // --- AUTH ---
   Future<AuthResponse> signIn(String email, String password) async {
     return await _client.auth.signInWithPassword(

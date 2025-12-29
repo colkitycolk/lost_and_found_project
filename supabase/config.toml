@@ -11,7 +11,7 @@ max_rows = 1000
 port = 60022
 # MOVED: Shadow port moved out of the forbidden range
 shadow_port = 60020 
-major_version = 17
+major_version = 15
 
 [db.pooler]
 enabled = false
