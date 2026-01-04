@@ -316,6 +316,7 @@ class _DetailsScreenState extends State<DetailsScreen> {
                           TileLayer(
                             urlTemplate:
                                 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+                                userAgentPackageName: 'lost_and_found_project', 
                           ),
                           MarkerLayer(
                             markers: [
